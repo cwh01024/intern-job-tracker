@@ -1,0 +1,23 @@
+-- Schema for Intern Job Tracker
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT UNIQUE NOT NULL,
+    location TEXT,
+    discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    notified BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER REFERENCES jobs(id),
+    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status TEXT
+);
+
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
