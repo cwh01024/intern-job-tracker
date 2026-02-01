@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Track summer intern SWE positions at top tech companies">
+    <title>Intern Job Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-content">
+                <h1>🚀 Intern Job Tracker</h1>
+                <p class="subtitle">Summer SWE Internship Hunter</p>
+            </div>
+            <button id="refresh-btn" class="btn-primary">
+                <span class="btn-icon">🔄</span>
+                Refresh Jobs
+            </button>
+        </header>
+
+        <main class="main">
+            <section class="stats-section">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="total-jobs">0</span>
+                        <span class="stat-label">Total Jobs</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔔</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="notified-jobs">0</span>
+                        <span class="stat-label">Notified</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🏢</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="companies-count">0</span>
+                        <span class="stat-label">Companies</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="jobs-section">
+                <div class="section-header">
+                    <h2>Job Listings</h2>
+                    <div class="filters">
+                        <select id="company-filter" class="filter-select">
+                            <option value="">All Companies</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="jobs-table-container">
+                    <table class="jobs-table" id="jobs-table">
+                        <thead>
+                            <tr>
+                                <th>Company</th>
+                                <th>Title</th>
+                                <th>Location</th>
+                                <th>Found</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobs-tbody">
+                            <tr class="loading-row">
+                                <td colspan="6">
+                                    <div class="loading">Loading jobs...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Tracking: Google, Amazon, Uber, DoorDash | Auto-refresh: Daily at 9 AM</p>
+        </footer>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
