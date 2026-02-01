@@ -24,6 +24,7 @@ type Repository interface {
 // Notifier interface for sending notifications.
 type Notifier interface {
 	NotifyJob(recipient string, job *model.Job) error
+	Send(recipient string, message string) error
 }
 
 // Scheduler manages the job checking schedule.
@@ -122,6 +123,15 @@ func (s *Scheduler) RunNow() error {
 	}
 
 	log.Printf("Job check complete. Found %d new positions.", newCount)
+
+	// Send notification with status
+	if newCount == 0 {
+		msg := "📋 Intern Job Tracker Update\n\nNo new positions found this check.\nCurrently tracking: Google, Amazon, Uber, DoorDash"
+		if err := s.notifier.Send(s.recipient, msg); err != nil {
+			log.Printf("Error sending status notification: %v", err)
+		}
+	}
+
 	return nil
 }
 
