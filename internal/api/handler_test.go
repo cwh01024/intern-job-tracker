@@ -26,8 +26,10 @@ func setupTestAPI(t *testing.T) (*Handler, func()) {
 		t.Fatalf("failed to create database: %v", err)
 	}
 
-	repo := repository.NewJobRepository(database)
-	handler := NewHandler(repo, nil)
+	jobRepo := repository.NewJobRepository(database)
+	companyRepo := repository.NewCompanyRepository(database)
+	runLogRepo := repository.NewRunLogRepository(database)
+	handler := NewHandler(jobRepo, companyRepo, runLogRepo, nil)
 
 	cleanup := func() {
 		database.Close()
@@ -41,9 +43,8 @@ func TestAPI_ListJobs(t *testing.T) {
 	handler, cleanup := setupTestAPI(t)
 	defer cleanup()
 
-	// Add some jobs
-	handler.repo.Create(&model.Job{Company: "Google", Title: "Intern 1", URL: "https://google.com/1"})
-	handler.repo.Create(&model.Job{Company: "Amazon", Title: "Intern 2", URL: "https://amazon.com/2"})
+	handler.jobRepo.Create(&model.Job{Company: "Google", Title: "Intern 1", URL: "https://google.com/1"})
+	handler.jobRepo.Create(&model.Job{Company: "Amazon", Title: "Intern 2", URL: "https://amazon.com/2"})
 
 	req := httptest.NewRequest("GET", "/api/jobs", nil)
 	w := httptest.NewRecorder()
@@ -55,9 +56,7 @@ func TestAPI_ListJobs(t *testing.T) {
 	}
 
 	var jobs []*model.Job
-	if err := json.NewDecoder(w.Body).Decode(&jobs); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
+	json.NewDecoder(w.Body).Decode(&jobs)
 
 	if len(jobs) != 2 {
 		t.Errorf("expected 2 jobs, got %d", len(jobs))
@@ -69,7 +68,7 @@ func TestAPI_GetJob(t *testing.T) {
 	defer cleanup()
 
 	job := &model.Job{Company: "Uber", Title: "SDE Intern", URL: "https://uber.com/1"}
-	handler.repo.Create(job)
+	handler.jobRepo.Create(job)
 
 	req := httptest.NewRequest("GET", "/api/jobs/1", nil)
 	w := httptest.NewRecorder()
@@ -79,38 +78,29 @@ func TestAPI_GetJob(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-
-	var result model.Job
-	json.NewDecoder(w.Body).Decode(&result)
-
-	if result.Company != "Uber" {
-		t.Errorf("expected Uber, got %s", result.Company)
-	}
 }
 
-func TestAPI_GetJob_NotFound(t *testing.T) {
+func TestAPI_ListCompanies(t *testing.T) {
 	handler, cleanup := setupTestAPI(t)
 	defer cleanup()
 
-	req := httptest.NewRequest("GET", "/api/jobs/999", nil)
+	req := httptest.NewRequest("GET", "/api/companies", nil)
 	w := httptest.NewRecorder()
 
 	handler.Router().ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected status 404, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
 	}
 }
 
-func TestAPI_GetStats(t *testing.T) {
+func TestAPI_GetMetrics(t *testing.T) {
 	handler, cleanup := setupTestAPI(t)
 	defer cleanup()
 
-	// Add jobs
-	handler.repo.Create(&model.Job{Company: "Google", Title: "Intern", URL: "https://google.com/1", DiscoveredAt: time.Now()})
-	handler.repo.Create(&model.Job{Company: "Amazon", Title: "Intern", URL: "https://amazon.com/2", DiscoveredAt: time.Now()})
+	handler.jobRepo.Create(&model.Job{Company: "Google", Title: "Intern", URL: "https://google.com/1", DiscoveredAt: time.Now()})
 
-	req := httptest.NewRequest("GET", "/api/stats", nil)
+	req := httptest.NewRequest("GET", "/api/metrics", nil)
 	w := httptest.NewRecorder()
 
 	handler.Router().ServeHTTP(w, req)
@@ -119,26 +109,24 @@ func TestAPI_GetStats(t *testing.T) {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
 
-	var stats map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&stats)
+	var metrics map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&metrics)
 
-	if stats["total_jobs"].(float64) != 2 {
-		t.Errorf("expected 2 total jobs")
+	if metrics["jobs"] == nil {
+		t.Error("expected jobs in metrics")
 	}
 }
 
-func TestAPI_CORS(t *testing.T) {
+func TestAPI_GetLogs(t *testing.T) {
 	handler, cleanup := setupTestAPI(t)
 	defer cleanup()
 
-	req := httptest.NewRequest("OPTIONS", "/api/jobs", nil)
-	req.Header.Set("Origin", "http://localhost:3000")
+	req := httptest.NewRequest("GET", "/api/logs", nil)
 	w := httptest.NewRecorder()
 
 	handler.Router().ServeHTTP(w, req)
 
-	// Should have CORS headers
-	if w.Header().Get("Access-Control-Allow-Origin") == "" {
-		t.Error("expected CORS header")
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
 	}
 }

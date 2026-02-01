@@ -1,14 +1,19 @@
 #!/bin/bash
 
-# Get the directory where this script is located
+# Run-once job check script
+# This script runs the job tracker once, scrapes all companies, and sends notifications
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
 
-echo "🚀 Starting Intern Job Tracker..."
+echo "� Starting Intern Job Tracker..."
 echo "📱 Recipient: +17246807862"
-echo "📂 Project Dir: $DIR"
+echo "⏰ Time: $(date)"
 echo "----------------------------------------"
 
-# Run the server
-# Using +1 for US country code based on 724 area code
-go run ./cmd/server -recipient="+17246807862"
+# Run one-time check (not server mode)
+export PATH="/opt/homebrew/bin:$PATH"
+go run ./cmd/server -run-once -recipient="+17246807862"
+
+echo "----------------------------------------"
+echo "✅ Check complete!"

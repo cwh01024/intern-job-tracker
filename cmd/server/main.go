@@ -25,43 +25,51 @@ func main() {
 	runOnce := flag.Bool("run-once", false, "Run job check once and exit")
 	flag.Parse()
 
+	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
+	log.SetPrefix("")
+
 	// Initialize database
 	database, err := db.New(*dbPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Fatalf("❌ Failed to initialize database: %v", err)
 	}
 	defer database.Close()
 	log.Println("✅ Database initialized")
 
+	// Initialize repositories
+	jobRepo := repository.NewJobRepository(database)
+	companyRepo := repository.NewCompanyRepository(database)
+	runLogRepo := repository.NewRunLogRepository(database)
+
 	// Initialize components
-	repo := repository.NewJobRepository(database)
 	jobNotifier := notifier.NewDefaultIMessageNotifier()
 	jobScraper := scraper.NewScraper(nil)
-	jobScheduler := scheduler.New(repo, jobScraper, jobNotifier, *recipient)
+	jobScheduler := scheduler.New(jobRepo, companyRepo, runLogRepo, jobScraper, jobNotifier, *recipient)
 
 	// Run once mode
 	if *runOnce {
-		log.Println("Running one-time job check...")
-		if err := jobScheduler.RunNow(); err != nil {
-			log.Fatalf("Job check failed: %v", err)
+		if *recipient == "" {
+			log.Println("⚠️  No recipient specified. Use -recipient=\"+1234567890\"")
 		}
-		log.Println("✅ Job check complete")
+		if err := jobScheduler.RunNow(); err != nil {
+			log.Fatalf("❌ Job check failed: %v", err)
+		}
 		return
 	}
 
 	// Start scheduler
 	if *recipient != "" {
 		if err := jobScheduler.StartWithSchedule(*schedule); err != nil {
-			log.Fatalf("Failed to start scheduler: %v", err)
+			log.Fatalf("❌ Failed to start scheduler: %v", err)
 		}
 		log.Printf("✅ Scheduler started (recipient: %s, schedule: %s)", *recipient, *schedule)
 	} else {
 		log.Println("⚠️  No recipient configured - scheduler disabled")
-		log.Println("   Run with -recipient='+1234567890' to enable notifications")
+		log.Println("   Run with -recipient=\"+1234567890\" to enable notifications")
 	}
 
 	// Initialize API
-	handler := api.NewHandler(repo, jobScheduler)
+	handler := api.NewHandler(jobRepo, companyRepo, runLogRepo, jobScheduler)
 	router := handler.Router()
 
 	// Graceful shutdown
@@ -69,18 +77,27 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("\nShutting down...")
+		log.Println("\n⏹️  Shutting down...")
 		jobScheduler.Stop()
 		os.Exit(0)
 	}()
 
 	// Start server
 	addr := ":" + *port
+	log.Println("═══════════════════════════════════════════")
 	log.Printf("🚀 Server starting on http://localhost%s", addr)
-	log.Println("   Dashboard: http://localhost" + addr)
-	log.Println("   API: http://localhost" + addr + "/api/jobs")
+	log.Println("───────────────────────────────────────────")
+	log.Println("📊 Dashboard: http://localhost" + addr)
+	log.Println("📡 API Endpoints:")
+	log.Println("   GET  /api/jobs       - List all jobs")
+	log.Println("   GET  /api/companies  - List companies")
+	log.Println("   POST /api/companies  - Add company")
+	log.Println("   GET  /api/metrics    - View metrics")
+	log.Println("   GET  /api/logs       - View run history")
+	log.Println("   POST /api/refresh    - Trigger job check")
+	log.Println("═══════════════════════════════════════════")
 
 	if err := http.ListenAndServe(addr, router); err != nil {
-		log.Fatalf("Server failed: %v", err)
+		log.Fatalf("❌ Server failed: %v", err)
 	}
 }

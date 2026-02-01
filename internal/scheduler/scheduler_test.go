@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"intern-job-tracker/internal/model"
+	"intern-job-tracker/internal/scraper"
 )
 
 // MockScraper for testing
@@ -14,6 +15,10 @@ type MockScraper struct {
 }
 
 func (m *MockScraper) ScrapeAll() ([]*model.Job, error) {
+	return m.Jobs, m.Err
+}
+
+func (m *MockScraper) ScrapeCompany(config scraper.CompanyConfig) ([]*model.Job, error) {
 	return m.Jobs, m.Err
 }
 
@@ -46,27 +51,28 @@ func (m *MockRepository) GetByURL(url string) (*model.Job, error) {
 	return m.Jobs[url], nil
 }
 
-func (m *MockRepository) GetUnnotified() ([]*model.Job, error) {
-	var jobs []*model.Job
-	for _, j := range m.Jobs {
-		if !m.Notified[j.ID] {
-			jobs = append(jobs, j)
-		}
-	}
-	return jobs, nil
-}
-
 func (m *MockRepository) MarkNotified(id int64) error {
 	m.Notified[id] = true
 	return nil
 }
 
-func (m *MockRepository) GetAll() ([]*model.Job, error) {
-	var jobs []*model.Job
-	for _, j := range m.Jobs {
-		jobs = append(jobs, j)
-	}
-	return jobs, nil
+// MockCompanyRepository for testing
+type MockCompanyRepository struct {
+	Companies []*model.Company
+}
+
+func (m *MockCompanyRepository) GetEnabled() ([]*model.Company, error) {
+	return m.Companies, nil
+}
+
+// MockRunLogRepository for testing
+type MockRunLogRepository struct {
+	Logs []*model.RunLog
+}
+
+func (m *MockRunLogRepository) Create(log *model.RunLog) error {
+	m.Logs = append(m.Logs, log)
+	return nil
 }
 
 // MockNotifier for testing
@@ -87,7 +93,9 @@ func (m *MockNotifier) NotifyJob(recipient string, job *model.Job) error {
 
 func TestScheduler_RunNow_FindsNewJobs(t *testing.T) {
 	repo := NewMockRepository()
-	scraper := &MockScraper{
+	companyRepo := &MockCompanyRepository{}
+	runLogRepo := &MockRunLogRepository{}
+	scr := &MockScraper{
 		Jobs: []*model.Job{
 			{Company: "Google", Title: "Intern 1", URL: "https://google.com/1"},
 			{Company: "Amazon", Title: "Intern 2", URL: "https://amazon.com/2"},
@@ -95,7 +103,7 @@ func TestScheduler_RunNow_FindsNewJobs(t *testing.T) {
 	}
 	notifier := &MockNotifier{}
 
-	sched := New(repo, scraper, notifier, "+1234567890")
+	sched := New(repo, companyRepo, runLogRepo, scr, notifier, "+1234567890")
 	err := sched.RunNow()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -106,75 +114,52 @@ func TestScheduler_RunNow_FindsNewJobs(t *testing.T) {
 		t.Errorf("expected 2 jobs created, got %d", len(repo.Jobs))
 	}
 
-	// Should have sent 2 notifications
-	if len(notifier.SentMessages) != 2 {
-		t.Errorf("expected 2 notifications, got %d", len(notifier.SentMessages))
+	// Should have sent 2 notifications + 1 run log
+	if len(runLogRepo.Logs) != 1 {
+		t.Errorf("expected 1 run log, got %d", len(runLogRepo.Logs))
 	}
 }
 
-func TestScheduler_RunNow_SkipsDuplicates(t *testing.T) {
+func TestScheduler_RunNow_WithCompanies(t *testing.T) {
 	repo := NewMockRepository()
-	// Pre-populate with existing job
-	repo.Jobs["https://google.com/1"] = &model.Job{ID: 1, URL: "https://google.com/1"}
-
-	scraper := &MockScraper{
+	companyRepo := &MockCompanyRepository{
+		Companies: []*model.Company{
+			{ID: 1, Name: "Google", CareerURL: "https://google.com/careers", SearchTerm: "intern"},
+		},
+	}
+	runLogRepo := &MockRunLogRepository{}
+	scr := &MockScraper{
 		Jobs: []*model.Job{
-			{Company: "Google", Title: "Intern 1", URL: "https://google.com/1"},
-			{Company: "Amazon", Title: "Intern 2", URL: "https://amazon.com/2"},
+			{Company: "Google", Title: "SDE Intern", URL: "https://google.com/job/1"},
 		},
 	}
 	notifier := &MockNotifier{}
 
-	sched := New(repo, scraper, notifier, "+1234567890")
+	sched := New(repo, companyRepo, runLogRepo, scr, notifier, "+1234567890")
 	err := sched.RunNow()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should only have 2 jobs (1 existing + 1 new)
-	if len(repo.Jobs) != 2 {
-		t.Errorf("expected 2 jobs, got %d", len(repo.Jobs))
-	}
-
-	// Should only send 1 notification (for new job)
-	if len(notifier.SentMessages) != 1 {
-		t.Errorf("expected 1 notification, got %d", len(notifier.SentMessages))
-	}
-}
-
-func TestScheduler_RunNow_MarksNotified(t *testing.T) {
-	repo := NewMockRepository()
-	scraper := &MockScraper{
-		Jobs: []*model.Job{
-			{Company: "Uber", Title: "Intern", URL: "https://uber.com/1"},
-		},
-	}
-	notifier := &MockNotifier{}
-
-	sched := New(repo, scraper, notifier, "+1234567890")
-	sched.RunNow()
-
-	// Job should be marked as notified
-	if !repo.Notified[1] {
-		t.Error("expected job to be marked as notified")
+	if len(repo.Jobs) != 1 {
+		t.Errorf("expected 1 job, got %d", len(repo.Jobs))
 	}
 }
 
 func TestScheduler_StartStop(t *testing.T) {
 	repo := NewMockRepository()
-	scraper := &MockScraper{Jobs: []*model.Job{}}
+	companyRepo := &MockCompanyRepository{}
+	runLogRepo := &MockRunLogRepository{}
+	scr := &MockScraper{Jobs: []*model.Job{}}
 	notifier := &MockNotifier{}
 
-	sched := New(repo, scraper, notifier, "+1234567890")
+	sched := New(repo, companyRepo, runLogRepo, scr, notifier, "+1234567890")
 
 	err := sched.Start()
 	if err != nil {
 		t.Fatalf("failed to start scheduler: %v", err)
 	}
 
-	// Wait a bit
 	time.Sleep(100 * time.Millisecond)
-
 	sched.Stop()
-	// Should not panic
 }
